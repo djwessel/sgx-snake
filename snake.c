@@ -35,9 +35,18 @@
 #define DBG(fmt, args...)
 #endif
 
-/* Default 0.2 sec between snake movement. */
+
+/*
+********** UNTRUSTED SECTION *****************
+*/
 unsigned int usec_delay = DEFAULT_DELAY;
 
+void set_usec_delay(unsigned int delay)
+{
+    usec_delay = delay;
+}
+
+/* Default 0.2 sec between snake movement. */
 int sigsetup (int signo, void (*callback)(int))
 {
    struct sigaction action;
@@ -69,6 +78,7 @@ void sig_handler (int signal __attribute__ ((unused)))
    exit (WEXITSTATUS(system ("stty sane")));
 }
 
+// unstrusted
 void alarm_handler (int signal __attribute__ ((unused)))
 {
    static struct itimerval val;
@@ -84,23 +94,40 @@ void alarm_handler (int signal __attribute__ ((unused)))
    setitimer (ITIMER_REAL, &val, NULL);
 }
 
-void show_score (screen_t *screen)
+void show_level(int level)
 {
    textcolor (LIGHTCYAN);
    gotoxy (3, MAXROW + 2);
-   printf ("Level: %05d", screen->level);
+   printf ("Level: %05d", level);
+}
 
-   textcolor (YELLOW);
-   gotoxy (21, MAXROW + 2);
-   printf ("Gold Left: %05d", screen->gold);
+void show_gold(int gold)
+{
+    textcolor (YELLOW);
+    gotoxy (21, MAXROW + 2);
+    printf ("Gold Left: %05d", gold);
+}
 
+void show_current_score(int score)
+{
    textcolor (LIGHTGREEN);
    gotoxy (43, MAXROW + 2);
-   printf ("Score: %05d", screen->score);
+   printf ("Score: %05d", score);
+}
 
+void show_high_score(int high_score)
+{
    textcolor (LIGHTMAGENTA);
    gotoxy (61, MAXROW + 2);
-   printf ("High Score: %05d", screen->high_score);
+   printf ("High Score: %05d", high_score);
+}
+
+void show_score (const screen_t *const screen)
+{
+    show_level(screen->level);
+    show_gold(screen->gold);
+    show_current_score(screen->score);
+    show_high_score(screen->high_score);
 }
 
 void draw_line (int col, int row)
@@ -111,15 +138,165 @@ void draw_line (int col, int row)
    textbackground (LIGHTBLUE);
    textcolor (LIGHTBLUE);
 
-   for (i = 0; i < MAXCOL + 2; i++)
-   {
+   for (i = 0; i < MAXCOL + 2; i++) {
       if (i == 0 || i == MAXCOL + 1)
          printf ("+");
       else
          printf ("-");
    }
-
    textattr (RESETATTR);
+}
+
+void setup_playing_board(const screen_t *const screen)
+{
+    int row = 0;
+    int col = 0;
+    /* Draw playing board */
+    clrscr();
+    draw_line (1, 1);
+
+    for (row = 0; row < MAXROW; row++) {
+        gotoxy (1, row + 2);
+        textcolor (LIGHTBLUE);
+        textbackground (LIGHTBLUE);
+        printf ("|");
+        textattr (RESETATTR);
+
+        textcolor (WHITE);
+        for (col = 0; col < MAXCOL; col++) {
+            printf ("%c", screen->grid[row][col]);
+        }
+
+        textcolor (LIGHTBLUE);
+        textbackground (LIGHTBLUE);
+        printf ("|");
+        textattr (RESETATTR);
+    }
+
+    draw_line (1, MAXROW + 2);
+
+    show_score (screen);
+
+    textcolor (LIGHTRED);
+    //gotoxy (3, 1);
+    //printf ("h:Help");
+    gotoxy (30, 1);
+    printf ("[ Micro Snake v%s ]", VERSION);
+}
+
+void blank_coordinates(int x, int y)
+{
+    textattr (RESETATTR);
+    gotoxy (x, y);
+    puts (" ");
+}
+
+void display_snake(const snake_t *const snake)
+{
+    textbackground (YELLOW);
+    for (int i = 0; i < snake->len; i++) {
+        gotoxy (snake->body[i].col + 1, snake->body[i].row + 1);
+        puts (" ");
+    }
+    textattr (RESETATTR);
+#ifdef DEBUG
+    gotoxy (71, 1);
+    printf ("(%02d,%02d)", snake->body[snake->len - 1].col, snake->body[snake->len - 1].row);
+#endif
+}
+
+int check_screen()
+{
+    if (WEXITSTATUS(system ("stty cbreak -echo stop u")))
+    {
+        fprintf (stderr, "Failed setting up the screen, is 'stty' missing?\n");
+        return 0;
+    }
+    return 1;
+}
+
+char get_char()
+{
+    return (char) getchar();
+}
+
+
+/*
+**************** TRUSTED SECTION *****************
+****************** move to enclave ***************
+*/
+
+void speed_up(screen_t *screen, snake_t *snake)
+{
+    if ((screen->level % 5 == 0) && (snake->speed > 1)) {
+        snake->speed--;        /* increase snake->speed every 5 levels */
+    }
+}
+
+void setup_level_on_start(screen_t *screen, snake_t *snake)
+{
+    screen->score = 0;
+    screen->obstacles = 4;
+    screen->level = 1;
+    snake->speed = 14;
+    snake->dir = RIGHT;
+}
+
+void level_up(screen_t *screen, snake_t *snake)
+{
+    screen->score += screen->level * 1000;
+    screen->obstacles += 2;
+    screen->level++;          /* add to obstacles */
+    speed_up(screen, snake);
+}
+
+void update_screen_for_level(screen_t* screen, snake_t* snake, int level)
+{
+    /* Set up global variables for new level */
+    screen->gold = 0;
+    snake->len = level + 4; // weird, snake len will be 5 for level 1 and 4 for all the following levels. 
+    set_usec_delay(DEFAULT_DELAY - level * 10000);
+}
+
+void fill_grid_blanks(screen_t* screen)
+{
+    /* Fill grid with blanks */
+   for (int row = 0; row < MAXROW; row++) {
+      for (int col = 0; col < MAXCOL; col++) {
+         screen->grid[row][col] = ' ';
+      }
+   }
+}
+
+void fill_grid_objects(screen_t* screen)
+{
+    /* Fill grid with objects */
+    int row, col;
+    for (int i = 0; i < screen->obstacles * 2; i++) {
+        /* Find free space to place an object on. */
+        do {
+            row = rand () % MAXROW;
+            col = rand () % MAXCOL;
+        } while (screen->grid[row][col] != ' ');
+
+        if (i < screen->obstacles) {
+            screen->grid[row][col] = CACTUS;
+        } else {
+            screen->gold++;
+            screen->grid[row][col] = GOLD;
+        }
+    }
+}
+
+void setup_snake_body(snake_t* snake, int level)
+{
+   /* Create snake array of length snake->len */
+   //needs this for START_COL
+   for (int i = 0; i < snake->len; i++)
+   {
+      snake->body[i].row = START_ROW;
+      snake->body[i].col = snake->dir == LEFT ? START_COL - i : START_COL + i;
+   }
 }
 
 /* If level==0 then just move on to the next level
@@ -127,239 +304,124 @@ void draw_line (int col, int row)
  * Otherwise start game at that level. */
 void setup_level (screen_t *screen, snake_t *snake, int level)
 {
-   int i, row, col;
-
-   srand ((unsigned int)time (NULL));
-
    /* Initialize on (re)start */
-   if (1 == level)
-   {
-      screen->score = 0;
-      screen->obstacles = 4;
-      screen->level = 1;
-      snake->speed = 14;
-      snake->dir = RIGHT;
+   if (1 == level) {
+       setup_level_on_start(screen, snake);
+   } else {
+      level_up(screen, snake);
    }
-   else
-   {
-      screen->score += screen->level * 1000;
-      screen->obstacles += 2;
-      screen->level++;          /* add to obstacles */
+   update_screen_for_level(screen, snake, level);
+   fill_grid_blanks(screen);
+   fill_grid_objects(screen);
+   setup_snake_body(snake, level);
 
-      if ((screen->level % 5 == 0) && (snake->speed > 1))
-      {
-         snake->speed--;        /* increase snake->speed every 5 levels */
-      }
-   }
-
-   /* Set up global variables for new level */
-   screen->gold = 0;
-   snake->len = level + 4;
-   usec_delay = DEFAULT_DELAY - level * 10000;
-
-   /* Fill grid with blanks */
-   for (row = 0; row < MAXROW; row++)
-   {
-      for (col = 0; col < MAXCOL; col++)
-      {
-         screen->grid[row][col] = ' ';
-      }
-   }
-
-   /* Fill grid with objects */
-   for (i = 0; i < screen->obstacles * 2; i++)
-   {
-      /* Find free space to place an object on. */
-      do
-      {
-         row = rand () % MAXROW;
-         col = rand () % MAXCOL;
-      }
-      while (screen->grid[row][col] != ' ');
-
-      if (i < screen->obstacles)
-      {
-         screen->grid[row][col] = CACTUS;
-      }
-      else
-      {
-         screen->gold++;
-         screen->grid[row][col] = GOLD;
-      }
-   }
-
-   /* Create snake array of length snake->len */
-   for (i = 0; i < snake->len; i++)
-   {
-      snake->body[i].row = START_ROW;
-      snake->body[i].col = snake->dir == LEFT ? START_COL - i : START_COL + i;
-   }
-
-   /* Draw playing board */
-   clrscr();
-   draw_line (1, 1);
-
-   for (row = 0; row < MAXROW; row++)
-   {
-      gotoxy (1, row + 2);
-
-      textcolor (LIGHTBLUE);
-      textbackground (LIGHTBLUE);
-      printf ("|");
-      textattr (RESETATTR);
-
-      textcolor (WHITE);
-      for (col = 0; col < MAXCOL; col++)
-      {
-         printf ("%c", screen->grid[row][col]);
-      }
-
-      textcolor (LIGHTBLUE);
-      textbackground (LIGHTBLUE);
-      printf ("|");
-      textattr (RESETATTR);
-   }
-
-   draw_line (1, MAXROW + 2);
-
-   show_score (screen);
-
-   textcolor (LIGHTRED);
-   //gotoxy (3, 1);
-   //printf ("h:Help");
-   gotoxy (30, 1);
-   printf ("[ Micro Snake v%s ]", VERSION);
+   setup_playing_board(screen);
 }
 
-void move (snake_t *snake, char keys[], char key)
+void determine_snake_direction(snake_t *snake, char keys[], char key)
 {
-   int i;
-   direction_t prev = snake->dir;
+    direction_t prev = snake->dir;
 
-   if (key == keys[RIGHT])
-   {
-      snake->dir = RIGHT;
-   }
-   else if (key == keys[LEFT])
-   {
-      snake->dir = LEFT;
-   }
-   else if (key == keys[UP])
-   {
-      snake->dir = UP;
-   }
-   else if (key == keys[DOWN])
-   {
-      snake->dir = DOWN;
-   }
-   else if (key == keys[LEFT_TURN])
-   {
-      switch (prev)
-      {
-         case LEFT:
+    if (key == keys[RIGHT]) {
+        snake->dir = RIGHT;
+    } else if (key == keys[LEFT]) {
+        snake->dir = LEFT;
+    } else if (key == keys[UP]) {
+        snake->dir = UP;
+    } else if (key == keys[DOWN]) {
+        snake->dir = DOWN;
+    } else if (key == keys[LEFT_TURN]) {
+        switch (prev) {
+        case LEFT:
             snake->dir = DOWN;
             break;
-
-         case RIGHT:
+        case RIGHT:
+            snake->dir = UP;
+            break;
+        case UP:
+            snake->dir = LEFT;
+            break;
+        case DOWN:
+            snake->dir = RIGHT;
+            break;
+        default:
+            break;
+        }
+    } else if (key == keys[RIGHT_TURN]) {
+        switch (prev) {
+        case LEFT:
             snake->dir = UP;
             break;
 
-         case UP:
-            snake->dir = LEFT;
-            break;
-
-         case DOWN:
-            snake->dir = RIGHT;
-            break;
-
-         default:
-            break;
-      }
-   }
-   else if (key == keys[RIGHT_TURN])
-   {
-      switch (prev)
-      {
-         case LEFT:
-            snake->dir = UP;
-            break;
-
-         case RIGHT:
+        case RIGHT:
             snake->dir = DOWN;
             break;
 
-         case UP:
+        case UP:
             snake->dir = RIGHT;
             break;
 
-         case DOWN:
+        case DOWN:
             snake->dir = LEFT;
             break;
 
-         default:
+        default:
             break;
-      }
-   }
+        }
+    }
+}
 
-   switch (snake->dir)
-   {
-      case LEFT:
-         snake->body[snake->len].row = snake->body[snake->len - 1].row;
-         snake->body[snake->len].col = snake->body[snake->len - 1].col - 1;
-         break;
+void do_move(snake_t* snake)
+{
+    switch (snake->dir) {
+    case LEFT:
+        snake->body[snake->len].row = snake->body[snake->len - 1].row;
+        snake->body[snake->len].col = snake->body[snake->len - 1].col - 1;
+        break;
 
-      case RIGHT:
-         snake->body[snake->len].row = snake->body[snake->len - 1].row;
-         snake->body[snake->len].col = snake->body[snake->len - 1].col + 1;
-         break;
+    case RIGHT:
+        snake->body[snake->len].row = snake->body[snake->len - 1].row;
+        snake->body[snake->len].col = snake->body[snake->len - 1].col + 1;
+        break;
 
-      case UP:
-         snake->body[snake->len].row = snake->body[snake->len - 1].row - 1;
-         snake->body[snake->len].col = snake->body[snake->len - 1].col;
-         break;
+    case UP:
+        snake->body[snake->len].row = snake->body[snake->len - 1].row - 1;
+        snake->body[snake->len].col = snake->body[snake->len - 1].col;
+        break;
 
-      case DOWN:
-         snake->body[snake->len].row = snake->body[snake->len - 1].row + 1;
-         snake->body[snake->len].col = snake->body[snake->len - 1].col;
-         break;
+    case DOWN:
+        snake->body[snake->len].row = snake->body[snake->len - 1].row + 1;
+        snake->body[snake->len].col = snake->body[snake->len - 1].col;
+        break;
 
-      default:
-         /* NOP */
-         break;
-   }
+    default:
+        /* NOP */
+        break;
+    }
+}
 
+void move(snake_t *snake, char keys[], char key)
+{
+   determine_snake_direction(snake, keys, key);
+   do_move(snake);
    /* Blank last segment of snake */
-   textattr (RESETATTR);
-   gotoxy (snake->body[0].col + 1, snake->body[0].row + 1);
-   puts (" ");
+   blank_coordinates(snake->body[0].col + 1, snake->body[0].row + 1);
 
    /* ... and remove it from the array */
-   for (i = 1; i <= snake->len; i++)
-   {
+   for (int i = 1; i <= snake->len; i++) {
       snake->body[i - 1] = snake->body[i];
    }
 
    /* Display snake in yellow */
-   textbackground (YELLOW);
-   for (i = 0; i < snake->len; i++)
-   {
-      gotoxy (snake->body[i].col + 1, snake->body[i].row + 1);
-      puts (" ");
-   }
-   textattr (RESETATTR);
-#ifdef DEBUG
-   gotoxy (71, 1);
-   printf ("(%02d,%02d)", snake->body[snake->len - 1].col, snake->body[snake->len - 1].row);
-#endif
+   display_snake(snake);
 }
 
-int collide_walls (snake_t *snake)
+int collide_walls (const snake_t *const snake)
 {
-   snake_segment_t *head = &snake->body[snake->len - 1];
+   const snake_segment_t *const head = &snake->body[snake->len - 1];
 
    if ((head->row > MAXROW) || (head->row < 1) ||
-       (head->col > MAXCOL) || (head->col < 1))
-   {
+       (head->col > MAXCOL) || (head->col < 1)) {
       DBG("Wall collision.\n");
       return 1;
    }
@@ -367,12 +429,11 @@ int collide_walls (snake_t *snake)
    return 0;
 }
 
-int collide_object (snake_t *snake, screen_t *screen, char object)
+int collide_object (const snake_t *const snake, const screen_t *const screen, char object)
 {
-   snake_segment_t *head = &snake->body[snake->len - 1];
+   const snake_segment_t *const head = &snake->body[snake->len - 1];
 
-   if (screen->grid[head->row - 1][head->col - 1] == object)
-   {
+   if (screen->grid[head->row - 1][head->col - 1] == object) {
       DBG("Object '%c' collision.\n", object);
       return 1;
    }
@@ -380,14 +441,14 @@ int collide_object (snake_t *snake, screen_t *screen, char object)
    return 0;
 }
 
-int collide_self (snake_t *snake)
+int collide_self (const snake_t *const snake)
 {
    int i;
-   snake_segment_t *head = &snake->body[snake->len - 1];
+   const snake_segment_t *const head = &snake->body[snake->len - 1];
 
    for (i = 0; i < snake->len - 1; i++)
    {
-      snake_segment_t *body = &snake->body[i];
+      const snake_segment_t *const body = &snake->body[i];
 
       if (head->row == body->row && head->col == body->col)
       {
@@ -399,7 +460,7 @@ int collide_self (snake_t *snake)
    return 0;
 }
 
-int collision (snake_t *snake, screen_t *screen)
+int collision (const snake_t *const snake, const screen_t *const screen)
 {
    return collide_walls (snake) ||
       collide_object (snake, screen, CACTUS) ||
@@ -418,84 +479,78 @@ int eat_gold (snake_t *snake, screen_t *screen)
    screen->score += snake->len * screen->obstacles;
    snake->len++;
 
-   if (screen->score > screen->high_score)
-   {
+   if (screen->score > screen->high_score) {
       screen->high_score = screen->score; /* New high score! */
    }
 
    return screen->gold;
 }
 
+void start_game()
+{
+    char keypress;
+    snake_t snake;
+    screen_t screen;
+    char keys[NUM_KEYS] = DEFAULT_KEYS;
+
+    do {
+        setup_level (&screen, &snake, 1);
+        do {
+            keypress = get_char();
+            /* Move the snake one position. */
+            move (&snake, keys, keypress);
+            /* keeps cursor flashing in one place instead of following snake */
+            gotoxy (1, 1);
+
+            if (collision (&snake, &screen)) {
+                keypress = keys[QUIT];
+                break;
+            } else if (collide_object (&snake, &screen, GOLD)) {
+                /* If no gold left after consuming this one... */
+                if (!eat_gold (&snake, &screen)) {
+                    /* ... then go to next level. */
+                    setup_level (&screen, &snake, 0);
+                }
+                show_score (&screen);
+            }
+        }
+        while (keypress != keys[QUIT]);
+
+        show_score (&screen);
+
+        gotoxy (32, 6);
+        textcolor (LIGHTRED);
+        printf ("-G A M E  O V E R-");
+
+        gotoxy (32, 9);
+        textcolor (YELLOW);
+        printf ("Another Game (y/n)? ");
+
+        do
+        {
+            keypress = getchar ();
+        }
+        while ((keypress != 'y') && (keypress != 'n'));
+    } while (keypress == 'y');
+}
+
+/****************** MAIN UNTRUSTED *************/
+
 int main (void)
 {
-   char keypress;
-   snake_t snake;
-   screen_t screen;
-   char keys[NUM_KEYS] = DEFAULT_KEYS;
-
-   if (WEXITSTATUS(system ("stty cbreak -echo stop u")))
-   {
-      fprintf (stderr, "Failed setting up the screen, is 'stty' missing?\n");
-      return 1;
+   if (!check_screen()) {
+        return 1;
    }
-
-   /* Call it once to initialize the timer. */
+   printf("start\n");
+   srand ((unsigned int)time (NULL));
+    /* Call it once to initialize the timer. */
    alarm_handler (0);
 
    sigsetup (SIGINT, sig_handler);
    sigsetup (SIGHUP, sig_handler);
    sigsetup (SIGTERM, sig_handler);
 
-   do
-   {
-      setup_level (&screen, &snake, 1);
-
-      do
-      {
-         keypress = (char)getchar ();
-
-         /* Move the snake one position. */
-         move (&snake, keys, keypress);
-
-         /* keeps cursor flashing in one place instead of following snake */
-         gotoxy (1, 1);
-
-         if (collision (&snake, &screen))
-         {
-            keypress = keys[QUIT];
-            break;
-         }
-         else if (collide_object (&snake, &screen, GOLD))
-         {
-            /* If no gold left after consuming this one... */
-            if (!eat_gold (&snake, &screen))
-            {
-               /* ... then go to next level. */
-               setup_level (&screen, &snake, 0);
-            }
-
-            show_score (&screen);
-         }
-      }
-      while (keypress != keys[QUIT]);
-
-      show_score (&screen);
-
-      gotoxy (32, 6);
-      textcolor (LIGHTRED);
-      printf ("-G A M E  O V E R-");
-
-      gotoxy (32, 9);
-      textcolor (YELLOW);
-      printf ("Another Game (y/n)? ");
-
-      do
-      {
-         keypress = getchar ();
-      }
-      while ((keypress != 'y') && (keypress != 'n'));
-   }
-   while (keypress == 'y');
+   start_game();
 
    clrscr ();
 
