@@ -1,0 +1,27 @@
+/* snake.edl */
+
+enclave {
+    
+    trusted {
+	public void ecall_start_game();
+    };
+
+    untrusted {
+	public void ocall_get_char([out] char* key);
+
+	public void ocall_set_usec_delay(unisgned int delay);
+
+	public void ocall_print_game_over();
+	
+	public void ocall_print_another_game();
+
+	public void ocall_blank_coordinates(int x, int y);
+
+	public void ocall_displaye_snake([user_check] const snake_t *const snake);
+
+	public void ocall_show_score([user_check] const screen_t *const screen);
+	
+	public void ocall_setup_playing_board([user_check] const screen_t *const screen);
+    };
+
+};
