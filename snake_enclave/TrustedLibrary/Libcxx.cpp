@@ -33,8 +33,8 @@
 #include <cstdlib>
 #include <string>
 
-#include "../Enclave.h"
-#include "Enclave_t.h"
+#include "../snake.h"
+#include "snake_t.h"
 
 /*
  * ecall_exception:

@@ -1,8 +1,12 @@
 
+#include "conio.h"
 #include "sgx_trts.h"
+
+#include <stdlib.h>
+#include <stdio.h>
+
 #include "snake_t.h"
 
-#include "conio.h"
 
 #define GOLD      '$'
 #define CACTUS    '*'
@@ -22,6 +26,24 @@
 #else
 #define DBG(fmt, args...)
 #endif
+
+void printf(const char *fmt, ...)
+{
+    char buf[BUFSIZ] = {'\0'};
+    va_list ap;
+    va_start(ap, fmt);
+    vsnprintf(buf, BUFSIZ, fmt, ap);
+    va_end(ap);
+    ocall_print_string(buf);
+}
+
+int rand()
+{
+//TODO: check status
+  int* r = new int(0);
+  ocall_rand(r);
+  return *r;
+}
 
 void ecall_speed_up(screen_t* screen, snake_t* snake)
 {
@@ -72,8 +94,8 @@ void ecall_fill_grid_objects(screen_t* screen)
     for (int i = 0; i < screen->obstacles * 2; i++) {
         /* Find free space to place an object on. */
         do {
-            row = rand () % MAXROW;
-            col = rand () % MAXCOL;
+            row = rand() % MAXROW;
+            col = rand() % MAXCOL;
         } while (screen->grid[row][col] != ' ');
 
         if (i < screen->obstacles) {
@@ -100,9 +122,9 @@ void ecall_setup_level(screen_t* screen, snake_t* snake, int level)
 {
    /* Initialize on (re)start */
    if (1 == level) {
-       setup_level_on_start(screen, snake);
+       ecall_setup_level_on_start(screen, snake);
    } else {
-      level_up(screen, snake);
+      ecall_level_up(screen, snake);
    }
    ecall_update_screen_for_level(screen, snake, level);
    ecall_fill_grid_blanks(screen);
@@ -113,7 +135,7 @@ void ecall_setup_level(screen_t* screen, snake_t* snake, int level)
    ocall_setup_playing_board(screen);
 }
 
-void ecall_determine_snake_direction(snake_t* snake, char keys[], char key)
+void ecall_determine_snake_direction(snake_t* snake, char* keys, char key)
 {
     direction_t prev = snake->dir;
 
@@ -195,7 +217,7 @@ void ecall_do_move(snake_t* snake)
     }
 }
 
-void ecall_move(snake_t* snake, char keys[], char key)
+void ecall_move(snake_t* snake, char* keys, char key)
 {
    ecall_determine_snake_direction(snake, keys, key);
    ecall_do_move(snake);
@@ -211,9 +233,9 @@ void ecall_move(snake_t* snake, char keys[], char key)
    ocall_display_snake(snake);
 }
 
-void ecall_collide(const snake_t *const snake)
+int ecall_collide_walls(snake_t *snake)
 {
-   const snake_segment_t *const head = &snake->body[snake->len - 1];
+   snake_segment_t *head = &snake->body[snake->len - 1];
 
    if ((head->row > MAXROW) || (head->row < 1) ||
        (head->col > MAXCOL) || (head->col < 1)) {
@@ -224,22 +246,9 @@ void ecall_collide(const snake_t *const snake)
    return 0;
 }
 
-void ecall_collide_walls(const snake_t *const snake)
+int ecall_collide_object(snake_t *snake, screen_t *screen, char object)
 {
-   const snake_segment_t *const head = &snake->body[snake->len - 1];
-
-   if ((head->row > MAXROW) || (head->row < 1) ||
-       (head->col > MAXCOL) || (head->col < 1)) {
-      DBG("Wall collision.\n");
-      return 1;
-   }
-
-   return 0;
-}
-
-void ecall_collide_objects(const snake_t *const snake, const screen_t *const screen, char object)
-{
-   const snake_segment_t *const head = &snake->body[snake->len - 1];
+   snake_segment_t *head = &snake->body[snake->len - 1];
 
    if (screen->grid[head->row - 1][head->col - 1] == object) {
       DBG("Object '%c' collision.\n", object);
@@ -249,13 +258,13 @@ void ecall_collide_objects(const snake_t *const snake, const screen_t *const scr
    return 0;
 }
 
-void ecall_collide_self(const snake_t *const snake)
+int ecall_collide_self(snake_t *snake)
 {
    int i;
-   const snake_segment_t *const head = &snake->body[snake->len - 1];
+   snake_segment_t *head = &snake->body[snake->len - 1];
 
    for (i = 0; i < snake->len - 1; i++) {
-      const snake_segment_t *const body = &snake->body[i];
+      snake_segment_t *body = &snake->body[i];
 
       if (head->row == body->row && head->col == body->col) {
          DBG("Self collision.\n");
@@ -266,7 +275,7 @@ void ecall_collide_self(const snake_t *const snake)
    return 0;
 }
 
-void ecall_collision(const snake_t *const snake, const screen_t *const screen)
+int ecall_collision(snake_t *snake, screen_t *screen)
 {
    return ecall_collide_walls (snake) ||
       ecall_collide_object (snake, screen, CACTUS) ||
@@ -308,14 +317,14 @@ void ecall_start_game()
             ecall_move (&snake, keys, keypress);
             /* keeps cursor flashing in one place instead of following snake */
 //TODO: check return
-            ocall_gotoxy (1, 1);
+            ocall_goto (1, 1);
 
             if (ecall_collision (&snake, &screen)) {
                 keypress = keys[QUIT];
                 break;
             } else if (ecall_collide_object (&snake, &screen, GOLD)) {
                 /* If no gold left after consuming this one... */
-                if (!eat_gold (&snake, &screen)) {
+                if (!ecall_eat_gold (&snake, &screen)) {
                     /* ... then go to next level. */
                     ecall_setup_level (&screen, &snake, 0);
                 }

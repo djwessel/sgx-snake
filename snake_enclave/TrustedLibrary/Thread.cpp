@@ -30,8 +30,8 @@
  */
 
 
-#include "../Enclave.h"
-#include "Enclave_t.h"
+#include "../snake.h"
+#include "snake_t.h"
 
 #include <sgx_thread.h>
 

@@ -18,8 +18,6 @@
 #ifndef __CONIO_H__
 #define __CONIO_H__
 
-#include <stdio.h>
-
 /* Attributes */
 #define RESETATTR    0
 #define BRIGHT       1
@@ -48,10 +46,21 @@
 #define LIGHTCYAN    0x16
 #define WHITE        0x17
 
-void gotoxy(int x, int y)
-{
-    printf("\e[%d;%dH", y, x);
-}
+#define DEFAULT_DELAY 200000
+#define DEFAULT_KEYS  {'o', 'p', 'a', 'z', 'f', 'j', 'q'}
+
+#define GOLD      '$'
+#define CACTUS    '*'
+
+#define MAXROW    22
+#define MAXCOL    78
+
+#define START_LEN (4 + level)
+#define START_COL (MAXCOL / 2 - START_LEN)
+#define START_ROW ((MAXROW + 1) / 2)
+
+#include <stdio.h>
+#include <stdlib.h>
 
 /* Esc[2JEsc[1;1H             - Clear screen and move cursor to 1,1 (upper left) pos. */
 #define clrscr()              puts ("\e[2J\e[1;1H")
@@ -68,6 +77,12 @@ void gotoxy(int x, int y)
 #define textattr(attr)        __set_gm(attr, 0, 0)
 #define textcolor(color)      __set_gm(RESETATTR, color, 30)
 #define textbackground(color) __set_gm(RESETATTR, color, 40)
+
+#ifdef DEBUG
+#define DBG(fmt, args...) fprintf (stderr, fmt, ##args)
+#else
+#define DBG(fmt, args...)
+#endif
 
 #endif /* __CONIO_H__ */
 

@@ -30,30 +30,22 @@
  */
 
 
-#include <string.h>
-#include <sgx_cpuid.h>
+#include "../snake.h"
+#include "snake_u.h"
 
-#include "sgx_trts.h"
-#include "../Enclave.h"
-#include "Enclave_t.h"
-
-/* ecall_malloc_free:
- *   Uses malloc/free to allocate/free trusted memory.
+/* ecall_libc_functions:
+ *   Invokes standard C functions.
  */
-void ecall_malloc_free(void)
+void ecall_libc_functions(void)
 {
-    void *ptr = malloc(100);
-    assert(ptr != NULL);
-    memset(ptr, 0x0, 100);
-    free(ptr);
-}
+    sgx_status_t ret = SGX_ERROR_UNEXPECTED;
 
-/* ecall_sgx_cpuid:
- *   Uses sgx_cpuid to get CPU features and types.
- */
-void ecall_sgx_cpuid(int cpuinfo[4], int leaf)
-{
-    sgx_status_t ret = sgx_cpuid(cpuinfo, leaf);
+    ret = ecall_malloc_free(global_eid);
+    if (ret != SGX_SUCCESS)
+        abort();
+    
+    int cpuid[4] = {0x1, 0x0, 0x0, 0x0};
+    ret = ecall_sgx_cpuid(global_eid, cpuid, 0x0);
     if (ret != SGX_SUCCESS)
         abort();
 }

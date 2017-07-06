@@ -1,10 +1,8 @@
-#include <stdio.h>
-#include <string.h>
-#include <assert.h>
+#include "snake.h"
 
+#include <string.h>
 
 #include <signal.h>
-#include <stdlib.h>
 #include <sys/time.h>
 #include <sys/wait.h>
 #include <time.h>
@@ -15,6 +13,8 @@
 
 #include "sgx_urts.h"
 #include "snake_u.h"
+
+#include "conio.h"
 
 /* Global EID shared by multiple threads */
 sgx_enclave_id_t global_eid = 0;
@@ -203,7 +203,8 @@ void ocall_print_string(const char *str)
 
 int check_screen()
 {
-    if (WEXITSTATUS(system ("stty cbreak -echo stop u")))
+    int status = system("stty cbreak -echo stop u");
+    if (WEXITSTATUS(status)) 
     {
         fprintf (stderr, "Failed setting up the screen, is 'stty' missing?\n");
         return 0;
@@ -239,7 +240,8 @@ void sig_handler (int signal __attribute__ ((unused)))
 {
    clrscr ();
    DBG("Received signal %d\n", signal);
-   exit (WEXITSTATUS(system ("stty sane")));
+   int status = system("stty sane");
+   exit (WEXITSTATUS(status));
 }
 
 
@@ -257,7 +259,6 @@ void alarm_handler (int signal __attribute__ ((unused)))
 
    setitimer (ITIMER_REAL, &val, NULL);
 }
-
 
 /* Application entry */
 int SGX_CDECL main(int argc, char *argv[])
@@ -285,7 +286,7 @@ int SGX_CDECL main(int argc, char *argv[])
     sigsetup (SIGHUP, sig_handler);
     sigsetup (SIGTERM, sig_handler);
 
-    ecall_start_game();
+    ecall_start_game(global_eid);
 
     clrscr ();
 
@@ -302,6 +303,7 @@ int SGX_CDECL main(int argc, char *argv[])
 
     printf("Enter a character before exit ...\n");
     getchar();
-    return WEXITSTATUS(system ("stty sane"));
+    int status = system("stty sane");
+    return WEXITSTATUS(status);
 }
 
