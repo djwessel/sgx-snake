@@ -1,12 +1,16 @@
 
 #include "conio.h"
 #include "sgx_trts.h"
+#include "sgx_tseal.h"
+#include "sgx_tae_service.h"
+#include "string.h"
 
 #include <stdlib.h>
 #include <stdio.h>
 
 #include "snake_t.h"
 
+#define SEAL_SIZE 564
 
 #define GOLD      '$'
 #define CACTUS    '*'
@@ -301,11 +305,120 @@ int ecall_eat_gold(snake_t* snake, screen_t* screen)
    return screen->gold;
 }
 
+static uint32_t verify_sealed_data(
+    const sgx_sealed_data_t* data2unseal,
+    int* data_unsealed)
+{
+    uint32_t ret = 0;    
+    int temp_unseal;
+    uint32_t unseal_length = sizeof(int);
+
+    ret = sgx_unseal_data(data2unseal, NULL, 0,
+        (uint8_t*)&temp_unseal, &unseal_length);
+    if(ret != SGX_SUCCESS)
+    {
+        switch(ret)
+        {
+        case SGX_ERROR_MAC_MISMATCH:
+            /* MAC of the sealed data is incorrect.
+            The sealed data has been tampered.*/
+            break;
+        case SGX_ERROR_INVALID_ATTRIBUTE:
+            /*Indicates attribute field of the sealed data is incorrect.*/
+            break;
+        case SGX_ERROR_INVALID_ISVSVN:
+            /* Indicates isv_svn field of the sealed data is greater than
+            the enclave’s ISVSVN. This is a downgraded enclave.*/
+            break;
+        case SGX_ERROR_INVALID_CPUSVN:
+            /* Indicates cpu_svn field of the sealed data is greater than
+            the platform’s cpu_svn. enclave is  on a downgraded platform.*/
+            break;
+        case SGX_ERROR_INVALID_KEYNAME:
+            /*Indicates key_name field of the sealed data is incorrect.*/
+            break;
+        default:
+            /*other errors*/
+            break;
+        }
+        return ret;
+    }
+    memcpy(data_unsealed,&temp_unseal,sizeof(int));
+    /* remember to clear secret data after been used by memset_s */
+    memset_s(&temp_unseal, sizeof(int), 0,
+        sizeof(int));
+    return ret;
+}
+
+uint32_t seal(uint8_t* sealed_log, uint32_t sealed_log_size, int data2seal )
+{
+    uint32_t ret = 0;
+    int busy_retry_times = 2;
+    uint32_t size = sgx_calc_sealed_data_size(0,
+        sizeof(int));
+    if(sealed_log_size != size) 
+        return SGX_ERROR_INVALID_PARAMETER;
+    /*do{
+        ret = sgx_create_pse_session();
+    }while (ret == SGX_ERROR_BUSY && busy_retry_times--);*/
+    if (ret != SGX_SUCCESS)
+        return ret;
+    do
+    {
+        /* secret should be provisioned into enclave after the enclave attests to
+        the secret owner.
+        For example, the server that delivers the encrypted DRM content.
+        In this sample code, a random number is used to represent the secret */ 
+        /*sealing the plaintext to ciphertext. The ciphertext can be delivered
+        outside of enclave.*/
+        ret = sgx_seal_data(0, NULL,sizeof(data2seal),(uint8_t*)&data2seal,
+            sealed_log_size, (sgx_sealed_data_t*)sealed_log);
+    } while (0);
+    
+    /* remember to clear secret data after been used by memset_s */
+    //memset_s(&data2seal, sizeof(int), 0,
+    //    sizeof(int));
+    //sgx_close_pse_session();
+    return ret;
+}
+
+void load_high_score(screen_t* screen)
+{
+    //screen->high_score = sgx_calc_sealed_data_size(0, sizeof(int));//0;
+    screen->high_score = 0;
+    uint32_t ret = 0;    
+    uint8_t buffer[SEAL_SIZE];
+    //ocall_read_file(buffer, SEAL_SIZE)
+
+    
+
+    //ret = verify_sealed_data((const sgx_sealed_data_t*)buffer, &screen->high_score);
+    if (ret != SGX_SUCCESS) {
+       // couldnt load hs
+    }
+    // Load from sealed file
+}
+
+void save_high_score(screen_t* screen)
+{
+    uint32_t ret = 0;    
+    uint8_t buffer[SEAL_SIZE];
+    // Seal high score
+    ret = seal(buffer, SEAL_SIZE, screen->high_score);
+    if (ret != SGX_SUCCESS) {
+      // Couldnt save high score
+      return;
+    }
+    ocall_write_file(buffer, SEAL_SIZE);
+}
+
 void ecall_start_game()
 {
     char keypress;
     snake_t snake;
     screen_t screen;
+    load_high_score(&screen);
+    
     char keys[NUM_KEYS] = DEFAULT_KEYS;
 
     do {
@@ -347,5 +460,7 @@ void ecall_start_game()
         }
         while ((keypress != 'y') && (keypress != 'n'));
     } while (keypress == 'y');
+
+    save_high_score(&screen);
 }
 

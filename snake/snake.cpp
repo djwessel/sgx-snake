@@ -17,6 +17,27 @@
 
 #include "conio.h"
 
+void ocall_write_file (uint8_t *buf, uint32_t size) {
+    
+    FILE *pFile = fopen("test.seal", "wb");
+
+    if (pFile){
+        fwrite(buf, size, 1, pFile);
+    }
+
+    fclose(pFile);
+}
+
+void ocall_read_file (uint8_t *buf, uint32_t size) {
+    FILE *pFile = fopen("test.seal", "rb");
+
+    if (pFile){
+        fread(buf, size, 1, pFile);
+    }
+
+    fclose(pFile);
+}
+
 unsigned int usec_delay = DEFAULT_DELAY;
 void gotoxy(int x, int y)
 {

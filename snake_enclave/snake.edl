@@ -74,6 +74,10 @@ enclave {
     };
 
     untrusted {
+        void ocall_write_file([in] uint8_t *buf, uint32_t size);
+
+        void ocall_read_file([out] uint8_t *buf, uint32_t size);
+
 	void ocall_get_char([out] char* key);
 
 	void ocall_goto(int x, int y);
