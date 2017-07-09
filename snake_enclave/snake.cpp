@@ -358,9 +358,6 @@ uint32_t seal(uint8_t* sealed_log, uint32_t sealed_log_size, int data2seal )
         sizeof(int));
     if(sealed_log_size != size) 
         return SGX_ERROR_INVALID_PARAMETER;
-    /*do{
-        ret = sgx_create_pse_session();
-    }while (ret == SGX_ERROR_BUSY && busy_retry_times--);*/
     if (ret != SGX_SUCCESS)
         return ret;
     do
@@ -376,27 +373,20 @@ uint32_t seal(uint8_t* sealed_log, uint32_t sealed_log_size, int data2seal )
     } while (0);
     
     /* remember to clear secret data after been used by memset_s */
-    //memset_s(&data2seal, sizeof(int), 0,
-    //    sizeof(int));
-    //sgx_close_pse_session();
     return ret;
 }
 
 void load_high_score(screen_t* screen)
 {
-    //screen->high_score = sgx_calc_sealed_data_size(0, sizeof(int));//0;
-    screen->high_score = 0;
     uint32_t ret = 0;    
     uint8_t buffer[SEAL_SIZE];
-    //ocall_read_file(buffer, SEAL_SIZE)
+    ocall_read_file(buffer, SEAL_SIZE);
 
-    
-
-    //ret = verify_sealed_data((const sgx_sealed_data_t*)buffer, &screen->high_score);
+    ret = verify_sealed_data((const sgx_sealed_data_t*)buffer, &screen->high_score);
     if (ret != SGX_SUCCESS) {
        // couldnt load hs
     }
-    // Load from sealed file
+    //ocall_write_file(buffer, SEAL_SIZE);
 }
 
 void save_high_score(screen_t* screen)
@@ -417,6 +407,7 @@ void ecall_start_game()
     char keypress;
     snake_t snake;
     screen_t screen;
+    screen.high_score = 0;
     load_high_score(&screen);
     
     char keys[NUM_KEYS] = DEFAULT_KEYS;

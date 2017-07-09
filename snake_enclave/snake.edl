@@ -10,6 +10,7 @@ enclave {
 
     #define MAXROW 22
     #define MAXCOL 78
+    #define SEAL_SIZE 564
 
     enum direction_t { LEFT=0, RIGHT, UP, DOWN, LEFT_TURN, RIGHT_TURN, QUIT, NUM_KEYS };
 
@@ -74,9 +75,9 @@ enclave {
     };
 
     untrusted {
-        void ocall_write_file([in] uint8_t *buf, uint32_t size);
+        void ocall_write_file([in, out, size=SEAL_SIZE] uint8_t *buf, uint32_t size);
 
-        void ocall_read_file([out] uint8_t *buf, uint32_t size);
+        void ocall_read_file([out, size=SEAL_SIZE] uint8_t *buf, uint32_t size);
 
 	void ocall_get_char([out] char* key);
 
