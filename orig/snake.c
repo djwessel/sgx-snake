@@ -486,6 +486,20 @@ int eat_gold (snake_t *snake, screen_t *screen)
    return screen->gold;
 }
 
+void print_game_over()
+{
+     gotoxy (32, 6);
+     textcolor (LIGHTRED);
+     printf ("-G A M E  O V E R-");
+}
+
+void print_another_game()
+{
+	gotoxy (32, 9);
+	textcolor (YELLOW);
+	printf ("Another Game (y/n)? ");
+}
+
 void start_game()
 {
     char keypress;
@@ -518,15 +532,10 @@ void start_game()
 
         show_score (&screen);
 
-        gotoxy (32, 6);
-        textcolor (LIGHTRED);
-        printf ("-G A M E  O V E R-");
+	print_game_over();
+	print_another_game();
 
-        gotoxy (32, 9);
-        textcolor (YELLOW);
-        printf ("Another Game (y/n)? ");
-
-        do
+	do
         {
             keypress = getchar ();
         }

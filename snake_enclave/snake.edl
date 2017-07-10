@@ -1,0 +1,104 @@
+/* snake.edl */
+
+enclave {
+
+    include "user_types.h"
+
+    from "TrustedLibrary/Libc.edl" import *;
+    from "TrustedLibrary/Libcxx.edl" import ecall_exception, ecall_map;
+    from "TrustedLibrary/Thread.edl" import *;
+
+    #define MAXROW 22
+    #define MAXCOL 78
+    #define SEAL_SIZE 564
+
+    enum direction_t { LEFT=0, RIGHT, UP, DOWN, LEFT_TURN, RIGHT_TURN, QUIT, NUM_KEYS };
+
+    struct snake_segment_t {
+	    int row;
+	    int col;
+    };
+
+    struct snake_t {
+	    unsigned int    speed;
+	    direction_t     dir;
+
+	    int             len;
+	    snake_segment_t body[100];
+    };
+
+    struct screen_t {
+	    int level;
+	    int score;
+	    int high_score;
+	    int gold;
+	    int obstacles;
+
+	    char grid[MAXROW][MAXCOL];
+    };
+
+
+    trusted {
+	public void ecall_start_game();
+
+	void ecall_speed_up([in, out] struct screen_t* screen, [in, out] struct snake_t* snake);
+
+	void ecall_setup_level_on_start([in, out] struct screen_t* screen, [in, out] struct snake_t* snake);
+	
+	void ecall_level_up([in, out] struct screen_t* screen, [in, out] struct snake_t* snake);
+
+	void ecall_update_screen_for_level([in, out] struct screen_t* screen, [in, out] struct snake_t* snake, int level);
+	
+	void ecall_fill_grid_blanks([in, out] struct screen_t* screen);
+
+	void ecall_fill_grid_objects([in, out] struct screen_t* screen);
+	
+	void ecall_setup_snake_body([in, out] struct snake_t* snake, int level);
+
+	void ecall_setup_level([in, out] struct screen_t* screen, [in, out] struct snake_t* snake, int level);
+
+	void ecall_determine_snake_direction([in, out] struct snake_t* snake, [in, out] char* keys, char key);
+
+	void ecall_do_move([in, out] struct snake_t* snake);
+	
+	void ecall_move([in, out] struct snake_t* snake, [in, out] char* keys, char key);
+
+	int ecall_collide_walls([in, out] struct snake_t *snake);
+
+	int ecall_collide_object([in, out] struct snake_t *snake, [in, out] struct screen_t *screen, char object);
+
+	int ecall_collide_self([in, out] struct snake_t *snake);
+
+	int ecall_collision([in, out] struct snake_t *snake, [in, out] struct screen_t *screen);
+	
+	int ecall_eat_gold([in, out] struct snake_t* snake, [in, out] struct screen_t* screen);
+    };
+
+    untrusted {
+        void ocall_write_file([in, out, size=SEAL_SIZE] uint8_t *buf, uint32_t size);
+
+        void ocall_read_file([out, size=SEAL_SIZE] uint8_t *buf, uint32_t size);
+
+	void ocall_get_char([out] char* key);
+
+	void ocall_goto(int x, int y);
+
+	void ocall_set_usec_delay(unsigned int delay);
+
+	void ocall_print_game_over();
+	
+	void ocall_print_another_game();
+
+	void ocall_blank_coordinates(int x, int y);
+
+	void ocall_display_snake([in] struct snake_t *snake);
+
+	void ocall_show_score([in] struct screen_t *screen);
+	
+	void ocall_setup_playing_board([in] struct screen_t *screen);
+
+	void ocall_print_string([in, string] const char *str);
+	void ocall_rand([out] int* ret);
+    };
+
+};
